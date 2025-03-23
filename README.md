@@ -1,12 +1,12 @@
-# Weather MCP Server
+# Workflows MCP Server
 
 This is a Model Context Protocol (MCP) server that provides weather information for cities through a simple API.
 
 ## Features
-
-- Exposes a `get-weather` tool that fetches weather data for any city
-- Provides a `check-weather` prompt template for easy integration with LLMs
-- Uses HTTP/SSE transport for communication with clients
+- This server exposes workflows as tools that can be consumed by agents.  In this case a weather workflow is exposed as a set of tools:
+  - Exposes a `get-weather` tool that fetches weather data for any city
+  - Provides a `check-weather` prompt template for easy integration with LLMs
+  - Uses HTTP/SSE transport for communication with clients
 
 ## Note on Current Implementation
 
