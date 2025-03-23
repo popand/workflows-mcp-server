@@ -8,6 +8,18 @@ This is a Model Context Protocol (MCP) server that provides weather information 
   - Provides a `check-weather` prompt template for easy integration with LLMs
   - Uses HTTP/SSE transport for communication with clients
 
+## Workflow Architecture
+
+![Weather Workflow](imgs/workflow.png)
+
+When the `get-weather` tool is called, it triggers a workflow that:
+1. Takes the city name as input
+2. Queries the OpenWeatherMap service for current weather data at that location
+3. Passes the raw weather data to an LLM for interpretation
+4. Returns a friendly, natural language description of the current weather conditions
+
+This architecture allows for both accurate weather data retrieval and intelligent processing to provide weather information in a more conversational and easily understood format.
+
 ## Note on Current Implementation
 
 Due to some technical challenges with the MCP protocol implementation, we've provided two approaches:
