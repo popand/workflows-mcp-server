@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Weather Client</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .container {
+      margin-top: 20px;
+    }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 20px;
+      margin-bottom: 20px;
+      background-color: #f9f9f9;
+    }
+    .card h3 {
+      margin-top: 0;
+      color: #333;
+    }
+    .log {
+      background-color: #f5f5f5;
+      padding: 15px;
+      border-radius: 5px;
+      font-family: monospace;
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 20px;
+    }
+    .log p {
+      margin: 5px 0;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 16px;
+      margin: 4px 2px;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    input[type="text"] {
+      padding: 10px;
+      width: 250px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+    .status-connected {
+      color: green;
+      font-weight: bold;
+    }
+    .status-disconnected {
+      color: red;
+      font-weight: bold;
+    }
+    .message {
+      margin-top: 10px;
+      padding: 10px;
+      background-color: #e9f7ef;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>MCP Weather Client</h1>
+  <div class="container">
+    <div class="card">
+      <h3>Connection Status</h3>
+      <p>SSE Status: <span id="sse-status" class="status-disconnected">Disconnected</span></p>
+      <p>Connection ID: <span id="connection-id">None</span></p>
+      <button id="connect-btn">Connect</button>
+      <button id="disconnect-btn" disabled>Disconnect</button>
+    </div>
+    
+    <div class="card">
+      <h3>Weather Tool</h3>
+      <div>
+        <label for="city-input">City: </label>
+        <input type="text" id="city-input" placeholder="Enter city name" value="New York">
+        <button id="fetch-weather-btn" disabled>Get Weather</button>
+      </div>
+      <div id="weather-result" class="message" style="display: none;"></div>
+    </div>
+    
+    <div class="card">
+      <h3>Log</h3>
+      <div id="log" class="log"></div>
+    </div>
+  </div>
+
+  <script>
+    // DOM Elements
+    const sseStatusEl = document.getElementById('sse-status');
+    const connectionIdEl = document.getElementById('connection-id');
+    const connectBtn = document.getElementById('connect-btn');
+    const disconnectBtn = document.getElementById('disconnect-btn');
+    const cityInput = document.getElementById('city-input');
+    const fetchWeatherBtn = document.getElementById('fetch-weather-btn');
+    const weatherResultEl = document.getElementById('weather-result');
+    const logEl = document.getElementById('log');
+    
+    // Variables
+    let eventSource = null;
+    let connectionId = null;
+    
+    // Logging function
+    function log(message, isError = false) {
+      const p = document.createElement('p');
+      p.innerText = `${new Date().toISOString().substring(11, 19)} - ${message}`;
+      if (isError) {
+        p.style.color = 'red';
+      }
+      logEl.appendChild(p);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    
+    // Connect to SSE
+    connectBtn.addEventListener('click', () => {
+      if (eventSource) {
+        log('Already connected', true);
+        return;
+      }
+      
+      log('Connecting to SSE endpoint...');
+      eventSource = new EventSource('http://localhost:3000/sse');
+      
+      eventSource.addEventListener('connection', (event) => {
+        const data = JSON.parse(event.data);
+        connectionId = data.connectionId;
+        connectionIdEl.innerText = connectionId;
+        log(`Connected! Connection ID: ${connectionId}`);
+      });
+      
+      eventSource.addEventListener('ready', (event) => {
+        sseStatusEl.innerText = 'Connected';
+        sseStatusEl.className = 'status-connected';
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+        fetchWeatherBtn.disabled = false;
+        log('Server ready to receive requests');
+      });
+      
+      eventSource.addEventListener('error', (event) => {
+        log('SSE connection error', true);
+        console.error(event);
+      });
+      
+      eventSource.addEventListener('message', (event) => {
+        log(`Received message: ${event.data}`);
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'response' && data.method === 'callTool') {
+            displayWeatherResult(data.result);
+          }
+        } catch (error) {
+          log(`Error parsing message: ${error}`, true);
+        }
+      });
+    });
+    
+    // Disconnect from SSE
+    disconnectBtn.addEventListener('click', () => {
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+        connectionId = null;
+        
+        sseStatusEl.innerText = 'Disconnected';
+        sseStatusEl.className = 'status-disconnected';
+        connectionIdEl.innerText = 'None';
+        connectBtn.disabled = false;
+        disconnectBtn.disabled = true;
+        fetchWeatherBtn.disabled = true;
+        weatherResultEl.style.display = 'none';
+        
+        log('Disconnected from server');
+      }
+    });
+    
+    // Fetch weather
+    fetchWeatherBtn.addEventListener('click', async () => {
+      const city = cityInput.value.trim();
+      if (!city) {
+        log('Please enter a city name', true);
+        return;
+      }
+      
+      if (!connectionId) {
+        log('Not connected to server', true);
+        return;
+      }
+      
+      log(`Fetching weather for ${city}...`);
+      
+      const toolRequest = {
+        id: Date.now().toString(),
+        type: 'request',
+        method: 'callTool',
+        params: {
+          name: 'get-weather',
+          arguments: {
+            city: city
+          }
+        }
+      };
+      
+      try {
+        const response = await fetch(`http://localhost:3000/messages?connectionId=${connectionId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(toolRequest)
+        });
+        
+        const data = await response.json();
+        log(`Request sent, response: ${JSON.stringify(data)}`);
+        
+        // The actual result will come through the SSE connection
+      } catch (error) {
+        log(`Error sending request: ${error}`, true);
+      }
+    });
+    
+    // Display weather result
+    function displayWeatherResult(result) {
+      if (!result || !result.content || result.content.length === 0) {
+        log('Invalid weather result', true);
+        return;
+      }
+      
+      const weatherText = result.content[0].text;
+      weatherResultEl.innerText = weatherText;
+      weatherResultEl.style.display = 'block';
+      log('Weather information received and displayed');
+    }
+    
+    // Initialize
+    log('Client initialized. Click "Connect" to start.');
+  </script>
+</body>
+</html> 
